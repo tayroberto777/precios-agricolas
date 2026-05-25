@@ -348,7 +348,8 @@
   align-items:center; justify-content:center; gap:16px;">
   <div style="width:48px;height:48px;border:3px solid #2d3748;border-top-color:#3ecf8e;
     border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-  <p style="color:#e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;">Cargando datos desde Google Sheets...</p>
+  <p id="loadingMsg" style="color:#e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;">Cargando datos desde Google Sheets...</p>
+  <p id="loadingDetail" style="color:#718096;font-size:12px;font-family:'DM Sans',sans-serif;margin-top:-8px;"></p>
 </div>
 <div id="errorMsg" style="display:none;background:#f87171;color:#000;padding:16px 24px;
   border-radius:8px;margin:20px 40px;font-family:'DM Sans',sans-serif;font-size:13px;"></div>
@@ -407,20 +408,49 @@ function parseCsvLine(line) {
 // Cargar datos y arrancar dashboard
 async function cargarDatos() {
   mostrarCargando();
-  try {
-    // Cache-busting para que GitHub Pages no sirva versión vieja
-    const url = SHEET_URL + '&t=' + Date.now();
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('Error al cargar datos: ' + resp.status);
-    const csv = await resp.text();
-    const RAW = parseCSV(csv);
-    inicializarDashboard(RAW);
-  } catch(err) {
-    ocultarCargando();
-    document.getElementById('errorMsg').style.display = 'block';
-    document.getElementById('errorMsg').textContent = '⚠️ No se pudieron cargar los datos. Verifica que la hoja de Google esté publicada. (' + err.message + ')';
-    console.error(err);
+
+  // Intentamos 3 métodos en orden, el primero que funcione gana
+  const urlConCache = SHEET_URL + '&t=' + Date.now();
+
+  // Método 1: directo (funciona en GitHub Pages)
+  // Método 2: proxy allorigins (funciona en local y cuando Google bloquea CORS)
+  // Método 3: proxy corsproxy.io como respaldo
+  const mensajes = [
+    'Conectando con Google Sheets...',
+    'Usando conexión alternativa...',
+    'Último intento de conexión...'
+  ];
+  const intentos = [
+    () => fetch(urlConCache),
+    () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(urlConCache)),
+    () => fetch('https://corsproxy.io/?' + encodeURIComponent(urlConCache))
+  ];
+
+  let ultimoError = null;
+  for (let i = 0; i < intentos.length; i++) {
+    const intento = intentos[i];
+    const det = document.getElementById('loadingDetail');
+    if (det) det.textContent = mensajes[i];
+    try {
+      const resp = await intento();
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const csv = await resp.text();
+      if (!csv || csv.trim().length < 10) throw new Error('Respuesta vacía');
+      const RAW = parseCSV(csv);
+      if (!RAW || RAW.length === 0) throw new Error('Sin filas de datos');
+      inicializarDashboard(RAW);
+      return; // éxito, salimos
+    } catch(err) {
+      ultimoError = err;
+      console.warn('Intento fallido:', err.message);
+    }
   }
+
+  // Si los 3 fallaron
+  ocultarCargando();
+  document.getElementById('errorMsg').style.display = 'block';
+  document.getElementById('errorMsg').textContent =
+    '⚠️ No se pudieron cargar los datos. Verifica que la hoja de Google esté publicada como CSV. (' + ultimoError.message + ')';
 }
 
 function inicializarDashboard(RAW) {
