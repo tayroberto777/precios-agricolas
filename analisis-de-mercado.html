@@ -359,7 +359,8 @@
 
 <script>
 // ── CARGA DE DATOS DESDE GOOGLE SHEETS ──────────────────────
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWWVF1Q1nrP6hCWnKhoEXrz1I9B7yH6IRYH_g9pUc0iuMCDQxWEE2saDkCzJZCQ9ip7qXtqSPDO0Qn/pub?gid=2003159469&single=true&output=csv";
+// URL gviz/tq con ID real del documento — CORS habilitado por Google
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1n3Uxx0Np4BhSfovgLDbCfTlDq4oFwN_apY6dWd_AGpo/gviz/tq?tqx=out:csv&gid=2003159469";
 
 // Pantalla de carga
 function mostrarCargando() {
@@ -369,27 +370,57 @@ function ocultarCargando() {
   document.getElementById('loadingOverlay').style.display = 'none';
 }
 
-// Parser CSV robusto (maneja comas dentro de comillas)
+// Parser CSV robusto — maneja comillas dobles, saltos de línea Windows/Mac
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
+  // Normalizar saltos de línea
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  const lines = text.split('\n');
   const headers = parseCsvLine(lines[0]);
+  // Limpiar comillas de los headers
+  const cleanHeaders = headers.map(h => h.replace(/^"|"$/g, '').trim());
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
     const vals = parseCsvLine(lines[i]);
     const obj = {};
-    headers.forEach((h, idx) => {
-      const raw = vals[idx] !== undefined ? vals[idx].trim() : '';
+    cleanHeaders.forEach((h, idx) => {
+      // Limpiar comillas del valor
+      const raw = (vals[idx] !== undefined ? vals[idx] : '').replace(/^"|"$/g, '').trim();
       if (idx === 0) {
-        obj[h] = raw; // Fecha como string
+        // Fecha: convertir DD/MM/YYYY → YYYY-MM-DD para ordenar correctamente
+        if (raw.includes('/')) {
+          const [d, m, y] = raw.split('/');
+          obj[h] = y + '-' + m.padStart(2,'0') + '-' + d.padStart(2,'0');
+        } else {
+          obj[h] = raw;
+        }
       } else {
-        const num = parseFloat(raw.replace(/,/g, ''));
-        obj[h] = (raw === '' || isNaN(num)) ? null : num;
+        // Números: el CSV de Google usa punto como separador decimal
+        // y puede traer comas como separador de miles → quitar comas solo si no es decimal
+        // Ejemplo: "200,00" es 200.00 → reemplazar coma por punto
+        //          "1,500" podría ser 1500 o 1.5 → si hay exactamente 2 dígitos tras coma, es decimal
+        let normalized = raw;
+        const commaIdx = raw.lastIndexOf(',');
+        if (commaIdx !== -1) {
+          const afterComma = raw.slice(commaIdx + 1);
+          if (afterComma.length === 2 && !raw.includes('.')) {
+            // Es separador decimal tipo europeo: "200,00" → "200.00"
+            normalized = raw.slice(0, commaIdx) + '.' + afterComma;
+          } else {
+            // Es separador de miles: "1,500" → "1500"
+            normalized = raw.replace(/,/g, '');
+          }
+        }
+        const num = parseFloat(normalized);
+        obj[h] = (raw === '' || raw === '-' || isNaN(num)) ? null : num;
       }
     });
     rows.push(obj);
   }
-  return rows;
+  // Filtrar filas donde todos los valores numéricos son null
+  return rows.filter(r =>
+    Object.keys(r).slice(1).some(k => r[k] !== null)
+  );
 }
 
 function parseCsvLine(line) {
@@ -397,9 +428,14 @@ function parseCsvLine(line) {
   let cur = '', inQ = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
-    else { cur += ch; }
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; } // comilla escapada ""
+      else { inQ = !inQ; }
+    } else if (ch === ',' && !inQ) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
   }
   result.push(cur);
   return result;
@@ -417,14 +453,26 @@ async function cargarDatos() {
   // Método 3: proxy corsproxy.io como respaldo
   const mensajes = [
     'Conectando con Google Sheets...',
-    'Usando conexión alternativa...',
-    'Último intento de conexión...'
+    'Usando conexión alternativa (allorigins)...',
+    'Usando conexión alternativa (corsproxy)...'
   ];
+  // Intento 1: gviz/tq directo (CORS habilitado por Google)
+  // Intento 2 y 3: proxies como respaldo
   const intentos = [
-    () => fetch(urlConCache),
-    () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(urlConCache)),
-    () => fetch('https://corsproxy.io/?' + encodeURIComponent(urlConCache))
+    () => fetch(SHEET_URL),
+    () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(SHEET_URL)),
+    () => fetch('https://corsproxy.io/?' + encodeURIComponent(SHEET_URL))
   ];
+
+  // Wrapper con timeout de 8 segundos por intento
+  const fetchConTimeout = (fn, ms = 8000) => {
+    return Promise.race([
+      fn(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout (' + ms/1000 + 's)')), ms)
+      )
+    ]);
+  };
 
   let ultimoError = null;
   for (let i = 0; i < intentos.length; i++) {
@@ -432,17 +480,19 @@ async function cargarDatos() {
     const det = document.getElementById('loadingDetail');
     if (det) det.textContent = mensajes[i];
     try {
-      const resp = await intento();
+      const resp = await fetchConTimeout(intento, 8000);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const csv = await resp.text();
       if (!csv || csv.trim().length < 10) throw new Error('Respuesta vacía');
       const RAW = parseCSV(csv);
+      console.log('Filas parseadas:', RAW.length, '| Primera fila:', JSON.stringify(RAW[0]));
       if (!RAW || RAW.length === 0) throw new Error('Sin filas de datos');
+      ocultarCargando();
       inicializarDashboard(RAW);
       return; // éxito, salimos
     } catch(err) {
       ultimoError = err;
-      console.warn('Intento fallido:', err.message);
+      console.warn('Intento ' + (i+1) + ' fallido:', err.message);
     }
   }
 
