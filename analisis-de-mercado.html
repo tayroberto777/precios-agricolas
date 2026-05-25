@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor de Precios Agrícolas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2330;
+    --border: #2d3748;
+    --green: #3ecf8e;
+    --green-dim: rgba(62,207,142,0.12);
+    --red: #f87171;
+    --red-dim: rgba(248,113,113,0.12);
+    --amber: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #718096;
+    --accent: #3ecf8e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: linear-gradient(135deg, #0a2e1a 0%, #0d1117 60%);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .header-brand { display: flex; align-items: center; gap: 14px; }
+  .logo-mark {
+    width: 46px; height: 46px;
+    background: var(--green);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .brand-text h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .brand-text p { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+
+  .header-meta {
+    display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+  }
+  .meta-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta-pill span { color: var(--text); font-weight: 600; }
+
+  /* MAIN LAYOUT */
+  .container { padding: 32px 40px; max-width: 1600px; margin: 0 auto; }
+
+  /* KPI CARDS */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .kpi-card:hover { border-color: var(--green); }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: var(--green);
+    border-radius: 12px 12px 0 0;
+    opacity: 0.6;
+  }
+  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .kpi-value { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: #fff; }
+  .kpi-sub { font-size: 12px; margin-top: 4px; }
+
+  /* SECTION TITLE */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px; font-weight: 700; color: #fff;
+  }
+  .section-title span { color: var(--green); }
+
+  /* PRODUCT SELECTOR */
+  .product-grid {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 24px;
+  }
+  .prod-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: all .18s;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .prod-btn:hover { border-color: var(--green); color: var(--text); }
+  .prod-btn.active {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .prod-btn .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* CATEGORY TABS */
+  .cat-tabs {
+    display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .cat-tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all .15s;
+    font-weight: 500;
+  }
+  .cat-tab:hover { border-color: var(--green); color: var(--text); }
+  .cat-tab.active { background: var(--green); border-color: var(--green); color: #000; font-weight: 700; }
+
+  /* CHART AREA */
+  .chart-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+  .chart-controls {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  }
+  .chart-title-area h3 { font-size: 16px; font-weight: 600; color: var(--text); }
+  .chart-title-area p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .view-btns { display: flex; gap: 4px; }
+  .view-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .view-btn.active { background: var(--green); border-color: var(--green); color: #000; font-weight: 700; }
+
+  canvas { max-height: 400px !important; }
+
+  /* STATS TABLE */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    transition: all .2s;
+    cursor: pointer;
+  }
+  .stat-card:hover { border-color: var(--green); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .stat-card-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .stat-card-name { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+  .stat-card-unit { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .change-badge {
+    font-size: 12px; font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .badge-up { background: var(--red-dim); color: var(--red); }
+  .badge-down { background: var(--green-dim); color: var(--green); }
+  .badge-flat { background: rgba(113,128,150,.15); color: var(--muted); }
+
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row-label { color: var(--muted); }
+  .stat-row-val { font-weight: 600; color: var(--text); }
+
+  .mini-sparkline { margin-top: 12px; height: 36px; }
+
+
+
+  /* TOOLTIP OVERRIDE */
+  .tooltip-override {
+    background: #1a2332 !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5) !important;
+  }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* SCROLL */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+  @media (max-width: 600px) {
+    header { padding: 18px 20px; }
+    .container { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <div class="logo-mark">🌿</div>
+    <div class="brand-text">
+      <h1>Monitor de Precios Agrícolas</h1>
+      <p>Precios de referencia · Guatemala</p>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="meta-pill">Período: <span>07 Abr – 24 May 2026</span></div>
+    <div class="meta-pill">Productos: <span>23</span></div>
+    <div class="meta-pill">Registros: <span>42 días</span></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- KPIs -->
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <!-- CHART SECTION -->
+  <div class="section-header">
+    <div class="section-title">Evolución de <span>Precios</span></div>
+  </div>
+
+  <!-- Category tabs -->
+  <div class="cat-tabs" id="catTabs"></div>
+
+  <!-- Product buttons -->
+  <div class="product-grid" id="productGrid"></div>
+
+  <!-- Main chart -->
+  <div class="chart-wrapper">
+    <div class="chart-controls">
+      <div class="chart-title-area">
+        <h3 id="chartTitle">Seleccione un producto</h3>
+        <p id="chartSub"></p>
+      </div>
+      <div class="view-btns">
+        <button class="view-btn active" id="btn4w" onclick="setVista('4semanas')">4 Semanas</button>
+        <button class="view-btn" id="btnSem" onclick="setVista('semanal')">Semanal</button>
+        <button class="view-btn" id="btnAnual" onclick="setVista('anual')">Anual</button>
+        <button class="view-btn" id="btnReset" onclick="resetZoom()" style="display:none;border-color:var(--amber);color:var(--amber)">↺ Reset zoom</button>
+      </div>
+    </div>
+    <div id="zoomHint" style="display:none;font-size:11px;color:var(--muted);margin-bottom:10px;">
+      🖱 Rueda del mouse para hacer zoom · Clic y arrastrar para desplazarse · <strong style="color:var(--amber)">↺ Reset zoom</strong> para volver al año completo
+    </div>
+    <canvas id="mainChart"></canvas>
+  </div>
+
+  <!-- Stats cards -->
+  <div class="section-header">
+    <div class="section-title">Resumen <span>Estadístico</span></div>
+  </div>
+  <div class="stats-grid" id="statsGrid"></div>
+
+
+
+</div>
+
+<div id="loadingOverlay" style="
+  display:flex; position:fixed; inset:0; z-index:999;
+  background:rgba(13,17,23,0.92); flex-direction:column;
+  align-items:center; justify-content:center; gap:16px;">
+  <div style="width:48px;height:48px;border:3px solid #2d3748;border-top-color:#3ecf8e;
+    border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <p style="color:#e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;">Cargando datos desde Google Sheets...</p>
+</div>
+<div id="errorMsg" style="display:none;background:#f87171;color:#000;padding:16px 24px;
+  border-radius:8px;margin:20px 40px;font-family:'DM Sans',sans-serif;font-size:13px;"></div>
+<style>@keyframes spin{{to{{transform:rotate(360deg)}}}}</style>
+
+<footer>Monitor de Precios Agrícolas · Guatemala · 2026</footer>
+
+<script>
+// ── CARGA DE DATOS DESDE GOOGLE SHEETS ──────────────────────
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQWWVF1Q1nrP6hCWnKhoEXrz1I9B7yH6IRYH_g9pUc0iuMCDQxWEE2saDkCzJZCQ9ip7qXtqSPDO0Qn/pub?gid=2003159469&single=true&output=csv";
+
+// Pantalla de carga
+function mostrarCargando() {
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function ocultarCargando() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// Parser CSV robusto (maneja comas dentro de comillas)
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = parseCsvLine(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCsvLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => {
+      const raw = vals[idx] !== undefined ? vals[idx].trim() : '';
+      if (idx === 0) {
+        obj[h] = raw; // Fecha como string
+      } else {
+        const num = parseFloat(raw.replace(/,/g, ''));
+        obj[h] = (raw === '' || isNaN(num)) ? null : num;
+      }
+    });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function parseCsvLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += ch; }
+  }
+  result.push(cur);
+  return result;
+}
+
+// Cargar datos y arrancar dashboard
+async function cargarDatos() {
+  mostrarCargando();
+  try {
+    // Cache-busting para que GitHub Pages no sirva versión vieja
+    const url = SHEET_URL + '&t=' + Date.now();
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Error al cargar datos: ' + resp.status);
+    const csv = await resp.text();
+    const RAW = parseCSV(csv);
+    inicializarDashboard(RAW);
+  } catch(err) {
+    ocultarCargando();
+    document.getElementById('errorMsg').style.display = 'block';
+    document.getElementById('errorMsg').textContent = '⚠️ No se pudieron cargar los datos. Verifica que la hoja de Google esté publicada. (' + err.message + ')';
+    console.error(err);
+  }
+}
+
+function inicializarDashboard(RAW) {
+  // Procesar datos cargados
+const DATA = RAW.filter(r => Object.keys(r).slice(1).some(k => r[k] !== null));
+const PRODUCTS = Object.keys(DATA[0]).filter(k => k !== 'Fecha');
+const LABELS = DATA.map(r => r.Fecha);
+
+// CATEGORIES
+const CATEGORIES = {
+  'Tomate': ['Tomate 1a (Caja)', 'Tomate 2a (Caja)'],
+  'Chile': ['Chile Pimiento 1a (Caja)', 'Chile Pimiento 2a (Caja)', 'Chile Jalapeño 1a (Costal)', 'Chile Jalapeño 2a (Costal)'],
+  'Pepino': ['Pepino 1a (Costal)', 'Pepino 2a (Costal)'],
+  'Cebolla': ['Cebolla Blanca (Quintal)', 'Cebolla Amarilla (Quintal)', 'Cebolla Morada (Quintal)'],
+  'Papa': ['Papa Loman 1a (Quintal)', 'Papa Loman 2a (Quintal)'],
+  'Zanahoria': ['Zanahoria 1a (Bolsa)', 'Zanahoria 2a (Bolsa)'],
+  'Repollo': ['Repollo 1a (Red)', 'Repollo 2a (Red)'],
+  'Lechuga': ['Lechuga 1a (Caja)', 'Lechuga 2a (Caja)'],
+  'Papaya': ['Papaya 1a (Caja)', 'Papaya 2a (Caja)'],
+  'Otros': ['Sandía (Metro Cúbico)', 'Elote Dulce (Bandeja 4 und)']
+};
+
+const COLORS = [
+  '#3ecf8e','#60a5fa','#f472b6','#fbbf24','#a78bfa',
+  '#fb923c','#34d399','#e879f9','#38bdf8','#4ade80',
+  '#facc15','#c084fc','#f87171','#94a3b8','#2dd4bf'
+];
+
+// HELPERS
+function getVals(product) {
+  return DATA.map(r => r[product]);
+}
+function validVals(vals) {
+  return vals.filter(v => v !== null && v !== undefined);
+}
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function pctChange(a, b) { return b === 0 ? 0 : ((b - a) / a * 100).toFixed(1); }
+
+// STATS
+function getStats(product) {
+  const vals = getVals(product);
+  const valid = validVals(vals);
+  if (!valid.length) return null;
+  const first = valid[0], last = valid[valid.length-1];
+  const change = pctChange(first, last);
+  return {
+    first, last, min: Math.min(...valid), max: Math.max(...valid),
+    avg: mean(valid).toFixed(1), change: parseFloat(change),
+    count: valid.length
+  };
+}
+
+// KPI ROW
+function buildKPIs() {
+  const productGroups = Object.entries(CATEGORIES).slice(0,4);
+  const items = [
+    { label: 'Tomate 1a · Hoy', prod: 'Tomate 1a (Caja)' },
+    { label: 'Papa 1a · Hoy', prod: 'Papa Loman 1a (Quintal)' },
+    { label: 'Cebolla Blanca · Hoy', prod: 'Cebolla Blanca (Quintal)' },
+    { label: 'Pepino 1a · Hoy', prod: 'Pepino 1a (Costal)' },
+    { label: 'Lechuga 1a · Hoy', prod: 'Lechuga 1a (Caja)' },
+  ];
+  const html = items.map(it => {
+    const stats = getStats(it.prod);
+    if (!stats) return '';
+    const color = stats.change > 0 ? '#f87171' : stats.change < 0 ? '#3ecf8e' : '#718096';
+    const arrow = stats.change > 0 ? '↑' : stats.change < 0 ? '↓' : '→';
+    return `<div class="kpi-card">
+      <div class="kpi-label">${it.label}</div>
+      <div class="kpi-value">Q${stats.last.toFixed(0)}</div>
+      <div class="kpi-sub" style="color:${color}">${arrow} ${Math.abs(stats.change)}% vs inicio período</div>
+    </div>`;
+  }).join('');
+  document.getElementById('kpiRow').innerHTML = html;
+}
+
+// CATEGORY TABS
+function buildCatTabs() {
+  const html = ['Todos', ...Object.keys(CATEGORIES)].map((cat, i) =>
+    `<button class="cat-tab ${i===0?'active':''}" onclick="filterCat('${cat}',this)">${cat}</button>`
+  ).join('');
+  document.getElementById('catTabs').innerHTML = html;
+}
+
+let activeCat = 'Todos';
+function filterCat(cat, btn) {
+  activeCat = cat;
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  buildProductGrid();
+}
+
+// PRODUCT GRID
+let selectedProduct = null;
+function buildProductGrid() {
+  const prods = activeCat === 'Todos' ? PRODUCTS :
+    (CATEGORIES[activeCat] || []);
+  const html = prods.map((p, i) => {
+    const stats = getStats(p);
+    const change = stats ? stats.change : 0;
+    const arrow = change > 0 ? '▲' : change < 0 ? '▼' : '–';
+    const cls = selectedProduct === p ? 'active' : '';
+    const globalIdx = PRODUCTS.indexOf(p);
+    return `<button class="prod-btn ${cls}" data-pidx="${globalIdx}">
+      <span class="dot"></span>${p.split('(')[0].trim()} <span style="font-size:10px;opacity:.7">${arrow}${Math.abs(change)}%</span>
+    </button>`;
+  }).join('');
+  document.getElementById('productGrid').innerHTML = html;
+
+  document.querySelectorAll('.prod-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.getAttribute('data-pidx'));
+      const product = PRODUCTS[idx];
+      selectedProduct = product;
+      document.querySelectorAll('.prod-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      renderMainChart(product);
+    });
+  });
+}
+
+// ── VISTA ACTIVA ──────────────────────────────────────────────
+let mainChart = null;
+let vistaActual = '4semanas'; // '4semanas' | 'semanal' | 'anual'
+
+// ── AGRUPACIÓN SEMANAL ────────────────────────────────────────
+function agruparSemanal(product) {
+  const semanas = {};
+  DATA.forEach(row => {
+    const val = row[product];
+    if (val === null || val === undefined) return;
+    const d = new Date(row.Fecha);
+    // Lunes de esa semana como clave
+    const lunes = new Date(d);
+    lunes.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const key = lunes.toISOString().slice(0,10);
+    if (!semanas[key]) semanas[key] = [];
+    semanas[key].push(val);
+  });
+  const labels = [], promedios = [], minimos = [], maximos = [];
+  Object.keys(semanas).sort().forEach(k => {
+    const vals = semanas[k];
+    labels.push(k);
+    promedios.push(parseFloat((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1)));
+    minimos.push(Math.min(...vals));
+    maximos.push(Math.max(...vals));
+  });
+  return { labels, promedios, minimos, maximos };
+}
+
+// ── ÚLTIMAS 4 SEMANAS (datos diarios) ─────────────────────────
+function filtrar4Semanas(product) {
+  const cutoff = new Date(DATA[DATA.length-1].Fecha);
+  cutoff.setDate(cutoff.getDate() - 28);
+  const rows = DATA.filter(r => new Date(r.Fecha) >= cutoff);
+  return {
+    labels: rows.map(r => r.Fecha),
+    vals: rows.map(r => r[product])
+  };
+}
+
+// ── CAMBIAR VISTA ─────────────────────────────────────────────
+function setVista(vista) {
+  vistaActual = vista;
+  ['btn4w','btnSem','btnAnual'].forEach(id => {
+    document.getElementById(id).classList.remove('active');
+  });
+  const map = { '4semanas':'btn4w', 'semanal':'btnSem', 'anual':'btnAnual' };
+  document.getElementById(map[vista]).classList.add('active');
+  document.getElementById('btnReset').style.display = vista === 'anual' ? 'inline-block' : 'none';
+  document.getElementById('zoomHint').style.display = vista === 'anual' ? 'block' : 'none';
+  if (selectedProduct) renderMainChart(selectedProduct);
+}
+
+function resetZoom() {
+  if (mainChart) mainChart.resetZoom();
+}
+
+// ── RENDER PRINCIPAL ──────────────────────────────────────────
+function renderMainChart(product) {
+  const stats = getStats(product);
+  document.getElementById('chartTitle').textContent = product;
+  document.getElementById('chartSub').textContent =
+    stats ? `Mín: Q${stats.min} · Máx: Q${stats.max} · Promedio: Q${stats.avg} · Variación: ${stats.change > 0 ? '+' : ''}${stats.change}%` : '';
+
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  if (mainChart) mainChart.destroy();
+
+  const GREEN       = '#3ecf8e';
+  const GREEN_FILL  = 'rgba(62,207,142,0.12)';
+  const BAND_FILL   = 'rgba(62,207,142,0.08)';
+  const RED_FILL    = 'rgba(248,113,113,0.10)';
+
+  let datasets, labels, chartType, zoomEnabled = false;
+
+  if (vistaActual === '4semanas') {
+    // ── Diario últimas 4 semanas ──────────────────────────────
+    const { labels: lbs, vals } = filtrar4Semanas(product);
+    labels = lbs;
+    chartType = 'line';
+    datasets = [{
+      label: 'Precio diario',
+      data: vals,
+      borderColor: GREEN,
+      backgroundColor: GREEN_FILL,
+      borderWidth: 2.5,
+      fill: true,
+      tension: 0.35,
+      pointBackgroundColor: GREEN,
+      pointRadius: 4,
+      pointHoverRadius: 7,
+      spanGaps: true
+    }];
+
+  } else if (vistaActual === 'semanal') {
+    // ── Semanal con banda min/max ─────────────────────────────
+    const { labels: lbs, promedios, minimos, maximos } = agruparSemanal(product);
+    labels = lbs;
+    chartType = 'line';
+    datasets = [
+      {
+        label: 'Máximo semana',
+        data: maximos,
+        borderColor: 'transparent',
+        backgroundColor: 'transparent',
+        pointRadius: 0,
+        fill: '+1',  // rellena hasta el dataset siguiente
+        spanGaps: true,
+        order: 3
+      },
+      {
+        label: 'Banda min–máx',
+        data: minimos,
+        borderColor: 'transparent',
+        backgroundColor: BAND_FILL,
+        pointRadius: 0,
+        fill: '-1',
+        spanGaps: true,
+        order: 3
+      },
+      {
+        label: 'Mínimo semana',
+        data: minimos,
+        borderColor: 'rgba(62,207,142,0.3)',
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderDash: [4,4],
+        pointRadius: 0,
+        spanGaps: true,
+        order: 2
+      },
+      {
+        label: 'Promedio semanal',
+        data: promedios,
+        borderColor: GREEN,
+        backgroundColor: 'transparent',
+        borderWidth: 2.5,
+        pointBackgroundColor: GREEN,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+        fill: false,
+        spanGaps: true,
+        order: 1
+      }
+    ];
+
+  } else {
+    // ── Anual diario con zoom ─────────────────────────────────
+    labels = LABELS;
+    chartType = 'line';
+    zoomEnabled = true;
+    const vals = getVals(product);
+    datasets = [{
+      label: 'Precio diario',
+      data: vals,
+      borderColor: GREEN,
+      backgroundColor: GREEN_FILL,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,          // sin puntos para no saturar
+      pointHoverRadius: 6,
+      spanGaps: true
+    }];
+  }
+
+  // ── Tooltip personalizado ─────────────────────────────────
+  const tooltipCallbacks = vistaActual === 'semanal'
+    ? {
+        title: items => 'Semana del ' + items[0].label,
+        label: item => {
+          const map = {
+            'Promedio semanal': '  Promedio',
+            'Mínimo semana':    '  Mínimo  ',
+            'Banda min–máx':    null,
+            'Máximo semana':    '  Máximo  '
+          };
+          const prefix = map[item.dataset.label];
+          if (!prefix) return null;
+          return `${prefix}: Q${item.parsed.y?.toFixed(1) ?? '—'}`;
+        },
+        filter: item => item.dataset.label !== 'Banda min–máx'
+      }
+    : {
+        label: item => item.parsed.y !== null ? ` Q${item.parsed.y.toFixed(2)}` : ' Sin dato'
+      };
+
+  mainChart = new Chart(ctx, {
+    type: chartType,
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: vistaActual === 'semanal',
+          labels: {
+            color: '#718096', font: { size: 11 },
+            filter: item => !['Banda min–máx','Máximo semana'].includes(item.text)
+          }
+        },
+        tooltip: {
+          backgroundColor: '#1a2332',
+          borderColor: '#2d3748',
+          borderWidth: 1,
+          titleColor: '#e2e8f0',
+          bodyColor: '#94a3b8',
+          padding: 12,
+          callbacks: tooltipCallbacks
+        },
+        zoom: zoomEnabled ? {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x',
+            onZoomComplete: () => {
+              document.getElementById('btnReset').style.display = 'inline-block';
+            }
+          },
+          pan: { enabled: true, mode: 'x' }
+        } : {}
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#718096',
+            font: { size: 11 },
+            maxRotation: 45,
+            maxTicksLimit: vistaActual === 'anual' ? 24 : undefined
+          }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.06)' },
+          ticks: {
+            color: '#718096', font: { size: 11 },
+            callback: v => 'Q' + v
+          }
+        }
+      }
+    }
+  });
+}
+
+// STATS GRID
+function buildStatsGrid() {
+  const html = PRODUCTS.map(p => {
+    const stats = getStats(p);
+    if (!stats) return '';
+    const up = stats.change > 0, down = stats.change < 0;
+    const badgeCls = up ? 'badge-up' : down ? 'badge-down' : 'badge-flat';
+    const arrow = up ? '↑' : down ? '↓' : '→';
+    return `<div class="stat-card" onclick="scrollToAndSelect('${p.replace(/'/g,"\\'")}')">
+      <div class="stat-card-header">
+        <div>
+          <div class="stat-card-name">${p.split('(')[0].trim()}</div>
+          <div class="stat-card-unit">${(p.match(/\(([^)]+)\)/) || ['',''])[1]}</div>
+        </div>
+        <span class="change-badge ${badgeCls}">${arrow} ${Math.abs(stats.change)}%</span>
+      </div>
+      <div class="stat-row"><span class="stat-row-label">Último precio</span><span class="stat-row-val">Q${stats.last}</span></div>
+      <div class="stat-row"><span class="stat-row-label">Primer precio</span><span class="stat-row-val">Q${stats.first}</span></div>
+      <div class="stat-row"><span class="stat-row-label">Mínimo</span><span class="stat-row-val" style="color:#3ecf8e">Q${stats.min}</span></div>
+      <div class="stat-row"><span class="stat-row-label">Máximo</span><span class="stat-row-val" style="color:#f87171">Q${stats.max}</span></div>
+      <div class="stat-row"><span class="stat-row-label">Promedio</span><span class="stat-row-val">Q${stats.avg}</span></div>
+      <div class="stat-row"><span class="stat-row-label">Registros</span><span class="stat-row-val">${stats.count} días</span></div>
+    </div>`;
+  }).join('');
+  document.getElementById('statsGrid').innerHTML = html;
+}
+
+function scrollToAndSelect(product) {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(() => {
+    const idx = PRODUCTS.indexOf(product);
+    const btn = document.querySelector(`.prod-btn[data-pidx="${idx}"]`);
+    if (btn) btn.click();
+  }, 400);
+}
+
+// INIT
+buildKPIs();
+buildCatTabs();
+buildProductGrid();
+buildStatsGrid();
+
+// Select first product by default
+setTimeout(() => {
+  const firstBtn = document.querySelector('.prod-btn');
+  if (firstBtn) firstBtn.click();
+}, 100);
+}
+
+// Arrancar al cargar la página
+window.addEventListener('DOMContentLoaded', cargarDatos);
+</script>
+</body>
+</html>
