@@ -503,12 +503,6 @@ async function cargarDatos() {
     '⚠️ No se pudieron cargar los datos. Verifica que la hoja de Google esté publicada como CSV. (' + ultimoError.message + ')';
 }
 
-function inicializarDashboard(RAW) {
-  // Procesar datos cargados
-const DATA = RAW.filter(r => Object.keys(r).slice(1).some(k => r[k] !== null));
-const PRODUCTS = Object.keys(DATA[0]).filter(k => k !== 'Fecha');
-const LABELS = DATA.map(r => r.Fecha);
-
 // CATEGORIES
 const CATEGORIES = {
   'Tomate': ['Tomate 1a (Caja)', 'Tomate 2a (Caja)'],
@@ -522,6 +516,14 @@ const CATEGORIES = {
   'Papaya': ['Papaya 1a (Caja)', 'Papaya 2a (Caja)'],
   'Otros': ['Sandía (Metro Cúbico)', 'Elote Dulce (Bandeja 4 und)']
 };
+
+// Variables globales — se asignan cuando cargan los datos
+let mainChart = null; // global
+let vistaActual = '4semanas'; // global
+let selectedProduct = null; // global
+let activeCat = 'Todos'; // global
+let DATA = [], PRODUCTS = [], LABELS = [];
+
 
 const COLORS = [
   '#3ecf8e','#60a5fa','#f472b6','#fbbf24','#a78bfa',
@@ -585,7 +587,7 @@ function buildCatTabs() {
   document.getElementById('catTabs').innerHTML = html;
 }
 
-let activeCat = 'Todos';
+
 function filterCat(cat, btn) {
   activeCat = cat;
   document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
@@ -594,7 +596,7 @@ function filterCat(cat, btn) {
 }
 
 // PRODUCT GRID
-let selectedProduct = null;
+
 function buildProductGrid() {
   const prods = activeCat === 'Todos' ? PRODUCTS :
     (CATEGORIES[activeCat] || []);
@@ -623,20 +625,27 @@ function buildProductGrid() {
 }
 
 // ── VISTA ACTIVA ──────────────────────────────────────────────
-let mainChart = null;
-let vistaActual = '4semanas'; // '4semanas' | 'semanal' | 'anual'
+
 
 // ── AGRUPACIÓN SEMANAL ────────────────────────────────────────
+// Helper: parsear "YYYY-MM-DD" sin problemas de timezone
+function parseFecha(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function agruparSemanal(product) {
   const semanas = {};
   DATA.forEach(row => {
     const val = row[product];
     if (val === null || val === undefined) return;
-    const d = new Date(row.Fecha);
+    const d = parseFecha(row.Fecha);
     // Lunes de esa semana como clave
     const lunes = new Date(d);
     lunes.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    const key = lunes.toISOString().slice(0,10);
+    const key = lunes.getFullYear() + '-' +
+      String(lunes.getMonth()+1).padStart(2,'0') + '-' +
+      String(lunes.getDate()).padStart(2,'0');
     if (!semanas[key]) semanas[key] = [];
     semanas[key].push(val);
   });
@@ -653,9 +662,10 @@ function agruparSemanal(product) {
 
 // ── ÚLTIMAS 4 SEMANAS (datos diarios) ─────────────────────────
 function filtrar4Semanas(product) {
-  const cutoff = new Date(DATA[DATA.length-1].Fecha);
+  const ultima = parseFecha(DATA[DATA.length-1].Fecha);
+  const cutoff = new Date(ultima);
   cutoff.setDate(cutoff.getDate() - 28);
-  const rows = DATA.filter(r => new Date(r.Fecha) >= cutoff);
+  const rows = DATA.filter(r => parseFecha(r.Fecha) >= cutoff);
   return {
     labels: rows.map(r => r.Fecha),
     vals: rows.map(r => r[product])
@@ -902,17 +912,24 @@ function scrollToAndSelect(product) {
   }, 400);
 }
 
-// INIT
-buildKPIs();
-buildCatTabs();
-buildProductGrid();
-buildStatsGrid();
 
-// Select first product by default
-setTimeout(() => {
-  const firstBtn = document.querySelector('.prod-btn');
-  if (firstBtn) firstBtn.click();
-}, 100);
+function inicializarDashboard(RAW) {
+  // Asignar datos a variables globales
+  DATA = RAW.filter(r => Object.keys(r).slice(1).some(k => r[k] !== null));
+  PRODUCTS = Object.keys(DATA[0]).filter(k => k !== 'Fecha');
+  LABELS = DATA.map(r => r.Fecha);
+
+  // Construir el dashboard
+  buildKPIs();
+  buildCatTabs();
+  buildProductGrid();
+  buildStatsGrid();
+
+  // Seleccionar primer producto por defecto
+  setTimeout(() => {
+    const firstBtn = document.querySelector('.prod-btn');
+    if (firstBtn) firstBtn.click();
+  }, 100);
 }
 
 // Arrancar al cargar la página
