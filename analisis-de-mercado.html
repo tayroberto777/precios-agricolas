@@ -292,7 +292,7 @@
   <div class="header-meta">
     <div class="meta-pill">Período: <span>07 Abr – 24 May 2026</span></div>
     <div class="meta-pill">Productos: <span>23</span></div>
-    <div class="meta-pill">Registros: <span>42 días</span></div>
+    <div class="meta-pill">Registros: <span id="totalRegistros">—</span></div>
     <div class="meta-pill" id="ultimaActualizacion">Cargando...</div>
   </div>
 </header>
@@ -904,7 +904,7 @@ function buildStatsGrid() {
       <div class="stat-row"><span class="stat-row-label">Mínimo</span><span class="stat-row-val" style="color:#3ecf8e">Q${stats.min}</span></div>
       <div class="stat-row"><span class="stat-row-label">Máximo</span><span class="stat-row-val" style="color:#f87171">Q${stats.max}</span></div>
       <div class="stat-row"><span class="stat-row-label">Promedio</span><span class="stat-row-val">Q${stats.avg}</span></div>
-      <div class="stat-row"><span class="stat-row-label">Registros</span><span class="stat-row-val">${stats.count} días</span></div>
+      <div class="stat-row"><span class="stat-row-label">Registros con dato</span><span class="stat-row-val">${stats.count} de ${DATA.length} días</span></div>
     </div>`;
   }).join('');
   document.getElementById('statsGrid').innerHTML = html;
@@ -925,6 +925,10 @@ function inicializarDashboard(RAW) {
   DATA = RAW.filter(r => Object.keys(r).slice(1).some(k => r[k] !== null));
   PRODUCTS = Object.keys(DATA[0]).filter(k => k !== 'Fecha');
   LABELS = DATA.map(r => r.Fecha);
+
+  // Actualizar contador de registros en el header
+  const elReg = document.getElementById('totalRegistros');
+  if (elReg) elReg.textContent = DATA.length + ' días';
 
   // Construir el dashboard
   buildKPIs();
