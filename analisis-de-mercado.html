@@ -293,6 +293,7 @@
     <div class="meta-pill">Período: <span>07 Abr – 24 May 2026</span></div>
     <div class="meta-pill">Productos: <span>23</span></div>
     <div class="meta-pill">Registros: <span>42 días</span></div>
+    <div class="meta-pill" id="ultimaActualizacion">Cargando...</div>
   </div>
 </header>
 
@@ -488,6 +489,12 @@ async function cargarDatos() {
       console.log('Filas parseadas:', RAW.length, '| Primera fila:', JSON.stringify(RAW[0]));
       if (!RAW || RAW.length === 0) throw new Error('Sin filas de datos');
       ocultarCargando();
+      // Mostrar hora de última actualización en el header
+      const ahora = new Date();
+      const hora = ahora.toLocaleTimeString('es-GT', {hour: '2-digit', minute:'2-digit'});
+      const fecha = ahora.toLocaleDateString('es-GT', {day:'2-digit', month:'2-digit', year:'numeric'});
+      const el = document.getElementById('ultimaActualizacion');
+      if (el) el.innerHTML = 'Actualizado: <span>' + fecha + ' ' + hora + '</span>';
       inicializarDashboard(RAW);
       return; // éxito, salimos
     } catch(err) {
@@ -932,8 +939,48 @@ function inicializarDashboard(RAW) {
   }, 100);
 }
 
+// ── RECARGA AUTOMÁTICA ───────────────────────────────────────
+// Recarga los datos a las 9:05 AM hora Guatemala (UTC-6)
+// Si la página ya está abierta a esa hora, carga los datos nuevos sin recargar la página
+
+function programarRecargaDiaria() {
+  const ahora = new Date();
+
+  // Hora objetivo: 9:05 AM en Guatemala (UTC-6 = UTC+offset -360 min)
+  const objetivo = new Date();
+  objetivo.setHours(9, 5, 0, 0); // 9:05:00 AM hora local
+
+  // Si ya pasaron las 9:05 de hoy, programar para mañana
+  if (ahora >= objetivo) {
+    objetivo.setDate(objetivo.getDate() + 1);
+  }
+
+  const msHastaRecarga = objetivo - ahora;
+  const horas = Math.floor(msHastaRecarga / 3600000);
+  const minutos = Math.floor((msHastaRecarga % 3600000) / 60000);
+  console.log(`Próxima recarga de datos en ${horas}h ${minutos}m (9:05 AM)`);
+
+  setTimeout(() => {
+    console.log('Recargando datos automáticamente...');
+    // Actualizar indicador visual
+    const sub = document.getElementById('chartSub');
+    if (sub) sub.textContent = 'Actualizando datos...';
+    // Recargar datos desde Google Sheets sin recargar la página
+    cargarDatos().then(() => {
+      console.log('Datos actualizados correctamente');
+      // Volver a renderizar la gráfica activa
+      if (selectedProduct) renderMainChart(selectedProduct);
+      // Reprogramar para el día siguiente
+      programarRecargaDiaria();
+    });
+  }, msHastaRecarga);
+}
+
 // Arrancar al cargar la página
-window.addEventListener('DOMContentLoaded', cargarDatos);
+window.addEventListener('DOMContentLoaded', () => {
+  cargarDatos();
+  programarRecargaDiaria();
+});
 </script>
 </body>
 </html>
